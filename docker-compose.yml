@@ -1,0 +1,147 @@
+﻿name: fcg
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: fcg-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - fcg-net
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: fcg-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # Management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - fcg-net
+    restart: unless-stopped
+
+  users-api:
+    build:
+      context: ../fcg-users-api
+      dockerfile: Dockerfile
+    container_name: fcg-users-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=users_db;Username=users_user;Password=users_pwd"
+      JwtSettings__Issuer: FCG.UsersAPI
+      JwtSettings__Audience: FCG.Services
+      JwtSettings__Secret: ${JWT_SECRET:-fcg-dev-secret-change-me-minimum-32-chars}
+      JwtSettings__ExpirationHours: "8"
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: guest
+      RabbitMq__Password: guest
+    ports:
+      - "5001:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - fcg-net
+    restart: unless-stopped
+
+  catalog-api:
+    build:
+      context: ../fcg-catalog-api
+      dockerfile: Dockerfile
+    container_name: fcg-catalog-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=catalog_db;Username=catalog_user;Password=catalog_pwd"
+      JwtSettings__Issuer: FCG.UsersAPI
+      JwtSettings__Audience: FCG.Services
+      JwtSettings__Secret: ${JWT_SECRET:-fcg-dev-secret-change-me-minimum-32-chars}
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: guest
+      RabbitMq__Password: guest
+    ports:
+      - "5002:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - fcg-net
+    restart: unless-stopped
+
+  payments-api:
+    build:
+      context: ../fcg-payments-api
+      dockerfile: Dockerfile
+    container_name: fcg-payments-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=payments_db;Username=payments_user;Password=payments_pwd"
+      JwtSettings__Issuer: FCG.UsersAPI
+      JwtSettings__Audience: FCG.Services
+      JwtSettings__Secret: ${JWT_SECRET:-fcg-dev-secret-change-me-minimum-32-chars}
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: guest
+      RabbitMq__Password: guest
+    ports:
+      - "5003:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - fcg-net
+    restart: unless-stopped
+
+  notifications-api:
+    build:
+      context: ../fcg-notifications-api
+      dockerfile: Dockerfile
+    container_name: fcg-notifications-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: guest
+      RabbitMq__Password: guest
+    ports:
+      - "5004:8080"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - fcg-net
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  fcg-net:
+    driver: bridge
