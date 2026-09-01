@@ -15,6 +15,12 @@ kubectl wait --for=condition=ready pod -l app=postgres -n fcg --timeout=180s
 echo "==> Aguardando RabbitMQ ficar Ready..."
 kubectl wait --for=condition=ready pod -l app=rabbitmq -n fcg --timeout=180s
 
+echo "==> Aguardando MongoDB ficar Ready..."
+kubectl wait --for=condition=ready pod -l app=mongodb -n fcg --timeout=180s
+
+echo "==> Aguardando Redis ficar Ready..."
+kubectl wait --for=condition=ready pod -l app=redis -n fcg --timeout=120s
+
 echo "==> Microsserviços"
 kubectl apply -f "$ROOT/fcg-users-api/k8s/"
 kubectl apply -f "$ROOT/fcg-catalog-api/k8s/"

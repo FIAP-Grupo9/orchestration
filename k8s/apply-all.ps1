@@ -14,6 +14,12 @@ kubectl wait --for=condition=ready pod -l app=postgres -n fcg --timeout=180s
 Write-Host "==> Aguardando RabbitMQ ficar Ready..." -ForegroundColor Cyan
 kubectl wait --for=condition=ready pod -l app=rabbitmq -n fcg --timeout=180s
 
+Write-Host "==> Aguardando MongoDB ficar Ready..." -ForegroundColor Cyan
+kubectl wait --for=condition=ready pod -l app=mongodb -n fcg --timeout=180s
+
+Write-Host "==> Aguardando Redis ficar Ready..." -ForegroundColor Cyan
+kubectl wait --for=condition=ready pod -l app=redis -n fcg --timeout=120s
+
 Write-Host "==> Microsservicos" -ForegroundColor Cyan
 kubectl apply -f "$root/fcg-users-api/k8s/"
 kubectl apply -f "$root/fcg-catalog-api/k8s/"
