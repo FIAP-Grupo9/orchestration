@@ -90,6 +90,9 @@ services:
       RabbitMq__Host: rabbitmq
       RabbitMq__Username: guest
       RabbitMq__Password: guest
+      SeedData__Enabled: "true"
+      SeedData__AdminEmail: admin@fcg.com
+      SeedData__AdminPassword: Admin@1234
     ports:
       - "5001:8080"
     depends_on:
@@ -119,6 +122,7 @@ services:
       MongoDb__ConnectionString: "mongodb://fcg_mongo:fcg_mongo_pwd@mongodb:27017"
       MongoDb__Database: "catalog"
       Redis__ConnectionString: "redis:6379"
+      SeedData__Enabled: "true"
     ports:
       - "5002:8080"
     depends_on:

@@ -117,7 +117,20 @@ kubectl port-forward svc/rabbitmq   -n fcg 15672:15672 # guest / guest
 
 > O Grafana é publicado em **3001**, e não na 3000: essa porta costuma estar ocupada por outras ferramentas de desenvolvimento, e o conflito é silencioso — o `port-forward` reporta sucesso enquanto as requisições vão para o outro serviço.
 
-## 4. Conferir que subiu
+## 4. O que já vem pronto
+
+O ambiente sobe **pronto para uso**, sem nenhum passo manual:
+
+| Item | Valor |
+|---|---|
+| Usuário administrador | `admin@fcg.com` / `Admin@1234` |
+| Catálogo | 4 jogos cadastrados |
+
+A carga inicial é controlada pela configuração `SeedData__Enabled`, ligada nos manifestos deste repositório e **desligada por padrão no código**. Ela nunca sobrescreve dados existentes: só age se o catálogo estiver vazio e se o administrador ainda não existir.
+
+> Sem isso, um ambiente recém-criado subiria funcional mas vazio — e como não existe rota para promover alguém a administrador, o único caminho para cadastrar jogos seria alterar o banco de dados na mão.
+
+## 5. Conferir que subiu
 
 ```powershell
 kubectl get pods -n fcg
@@ -135,6 +148,10 @@ kubectl get scaledobject -n fcg    # deve mostrar READY=True e ACTIVE=False
 ```powershell
 $G = 'http://localhost:8000'
 $json = @{'Content-Type'='application/json'}
+
+# 0) Para as operações de administrador (cadastrar jogos e promoções),
+#    use as credenciais que já vêm criadas:
+#    admin@fcg.com / Admin@1234
 
 # 1) Cadastro (rota pública)
 Invoke-RestMethod "$G/users/api/auth/register" -Method Post -Headers $json `
