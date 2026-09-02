@@ -20,6 +20,9 @@ kubectl wait --for=condition=ready pod -l app=mongodb -n fcg --timeout=180s
 Write-Host "==> Aguardando Redis ficar Ready..." -ForegroundColor Cyan
 kubectl wait --for=condition=ready pod -l app=redis -n fcg --timeout=120s
 
+Write-Host "==> Stack de observabilidade (Prometheus + Grafana)" -ForegroundColor Cyan
+kubectl apply -f "$root/fcg-orchestration/k8s/monitoring/"
+
 Write-Host "==> Microsservicos" -ForegroundColor Cyan
 kubectl apply -f "$root/fcg-users-api/k8s/"
 kubectl apply -f "$root/fcg-catalog-api/k8s/"
@@ -35,3 +38,5 @@ Write-Host "    kubectl port-forward svc/users-api    -n fcg 5001:8080"
 Write-Host "    kubectl port-forward svc/catalog-api  -n fcg 5002:8080"
 Write-Host "    kubectl port-forward svc/payments-api -n fcg 5003:8080"
 Write-Host "    kubectl port-forward svc/rabbitmq     -n fcg 15672:15672"
+Write-Host "    kubectl port-forward svc/grafana      -n fcg 3001:3000   # admin / fcg-grafana-admin"
+Write-Host "    kubectl port-forward svc/prometheus   -n fcg 9090:9090"

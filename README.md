@@ -217,7 +217,7 @@ Nenhuma mensagem se perde nesse processo: ela fica guardada na fila até que um 
 - **Os serviços passam a publicar seus próprios números.** UsersAPI, CatalogAPI e PaymentsAPI ganham um endereço interno de onde o Prometheus lê as informações periodicamente. A instrumentação foi feita em código compartilhado, para não repetir o trabalho em cada serviço.
 - **Os painéis sobem prontos.** O Grafana é entregue já configurado, sem nenhum passo manual: ao abrir, o painel do projeto está lá.
 - **O histórico de números fica guardado em disco.** Sem isso, toda vez que o Prometheus reiniciasse — algo comum durante o desenvolvimento — o histórico seria perdido e os painéis apareceriam vazios. O período de retenção é de 7 dias, suficiente para o escopo.
-- **Acesso pelas portas 3000 (Grafana) e 9090 (Prometheus)**, apenas de dentro do cluster, com senha de administrador guardada como segredo do Kubernetes.
+- **Acesso por port-forward**, apenas de dentro do cluster, com senha de administrador guardada como segredo do Kubernetes. O Grafana é publicado em **`localhost:3001`** e não na 3000: a porta 3000 costuma estar ocupada por outras ferramentas de desenvolvimento na máquina, e o conflito é silencioso — o `port-forward` reporta sucesso enquanto as requisições vão para o outro serviço. O Prometheus fica na 9090.
 
 ---
 
@@ -299,6 +299,7 @@ Nem todos os componentes sobem da mesma maneira:
 | **(Fase 3)** A compra atualiza a biblioteca **ou** envia o e-mail, alternando entre as execuções | Serviços compartilhando a mesma fila | Aplicar a separação de filas descrita na decisão 6.1 |
 | **(Fase 3)** O cadastro funciona, mas a função de notificação nunca é acionada | As filas não foram criadas previamente | Conferir a configuração de filas descrita na decisão 6.2 |
 | **(Fase 3)** Requisição com token válido é recusada pelo gateway | Divergência entre a configuração de token do gateway e a dos serviços | Conferir os dados do emissor do token nos dois lados |
+| **(Fase 3)** O Grafana abre no navegador mas mostra outra aplicação, ou a API responde `Unauthorized` | A porta 3000 já estava ocupada por outra ferramenta na máquina; o `port-forward` reporta sucesso mesmo assim e o tráfego vai para o serviço errado | Usar a porta 3001 (`kubectl port-forward svc/grafana -n fcg 3001:3000`). Para confirmar que é o Grafana certo, `http://localhost:3001/api/health` deve responder com `database` e `version` |
 
 Comandos úteis de diagnóstico:
 

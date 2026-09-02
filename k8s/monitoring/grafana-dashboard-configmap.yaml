@@ -1,0 +1,168 @@
+# Dashboard versionado no Git. Cobre os três indicadores exigidos pelo enunciado:
+# latência das requisições, contagem de requisições (total e por status HTTP) e
+# taxa de erros. As consultas usam o histograma http_server_request_duration_seconds
+# publicado pela instrumentação OpenTelemetry dos microsserviços.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-fcg
+  namespace: fcg
+data:
+  fcg-overview.json: |
+    {
+      "uid": "fcg-overview",
+      "title": "FCG - Visao Geral dos Microsservicos",
+      "tags": ["fcg", "tech-challenge"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "10s",
+      "time": { "from": "now-30m", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Requisicoes por segundo (total)",
+          "gridPos": { "h": 5, "w": 8, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "fcg-prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "reqps", "decimals": 2, "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null } ] } },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+          "targets": [
+            { "refId": "A", "editorMode": "code", "range": true,
+              "expr": "sum(rate(http_server_request_duration_seconds_count[1m]))" }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Taxa de erro (5xx)",
+          "gridPos": { "h": 5, "w": 8, "x": 8, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "fcg-prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "percent", "decimals": 2, "min": 0, "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 } ] } },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+          "targets": [
+            { "refId": "A", "editorMode": "code", "range": true,
+              "expr": "100 * (sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\"}[5m])) or sum(rate(http_server_request_duration_seconds_count[5m])) * 0) / clamp_min(sum(rate(http_server_request_duration_seconds_count[5m])), 0.0001)" }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Latencia p95 (global)",
+          "gridPos": { "h": 5, "w": 8, "x": 16, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "fcg-prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "s", "decimals": 3, "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null }, { "color": "orange", "value": 0.5 }, { "color": "red", "value": 1 } ] } },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+          "targets": [
+            { "refId": "A", "editorMode": "code", "range": true,
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le))" }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "Latencia das requisicoes por servico (p50 e p95)",
+          "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "fcg-prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "s", "min": 0,
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "showPoints": "never" } },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+                       "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "refId": "A", "editorMode": "code", "range": true, "legendFormat": "{{app}} p95",
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le, app))" },
+            { "refId": "B", "editorMode": "code", "range": true, "legendFormat": "{{app}} p50",
+              "expr": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le, app))" }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Requisicoes por segundo, por servico",
+          "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "fcg-prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "reqps", "min": 0,
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15, "showPoints": "never", "stacking": { "mode": "normal" } } },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+                       "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "refId": "A", "editorMode": "code", "range": true, "legendFormat": "{{app}}",
+              "expr": "sum(rate(http_server_request_duration_seconds_count[1m])) by (app)" }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Requisicoes por segundo, por status code HTTP",
+          "gridPos": { "h": 9, "w": 12, "x": 0, "y": 14 },
+          "datasource": { "type": "prometheus", "uid": "fcg-prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "reqps", "min": 0,
+              "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 60, "showPoints": "never", "stacking": { "mode": "normal" } } },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+                       "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "refId": "A", "editorMode": "code", "range": true, "legendFormat": "HTTP {{http_response_status_code}}",
+              "expr": "sum(rate(http_server_request_duration_seconds_count[1m])) by (http_response_status_code)" }
+          ]
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Taxa de erro por servico (percentual de 5xx)",
+          "gridPos": { "h": 9, "w": 12, "x": 12, "y": 14 },
+          "datasource": { "type": "prometheus", "uid": "fcg-prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "percent", "min": 0,
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" } },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+                       "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "refId": "A", "editorMode": "code", "range": true, "legendFormat": "{{app}}",
+              "expr": "100 * (sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\"}[5m])) by (app) or sum(rate(http_server_request_duration_seconds_count[5m])) by (app) * 0) / clamp_min(sum(rate(http_server_request_duration_seconds_count[5m])) by (app), 0.0001)" }
+          ]
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Rotas mais acessadas (top 10)",
+          "gridPos": { "h": 9, "w": 24, "x": 0, "y": 23 },
+          "datasource": { "type": "prometheus", "uid": "fcg-prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "reqps", "min": 0,
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 5, "showPoints": "never" } },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+                       "tooltip": { "mode": "multi", "sort": "desc" } },
+          "targets": [
+            { "refId": "A", "editorMode": "code", "range": true, "legendFormat": "{{app}} {{http_route}}",
+              "expr": "topk(10, sum(rate(http_server_request_duration_seconds_count[5m])) by (app, http_route))" }
+          ]
+        }
+      ]
+    }
