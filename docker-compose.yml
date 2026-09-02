@@ -160,25 +160,12 @@ services:
       - fcg-net
     restart: unless-stopped
 
-  notifications-api:
-    build:
-      context: ../fcg-notifications-api
-      dockerfile: Dockerfile
-    container_name: fcg-notifications-api
-    environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ASPNETCORE_URLS: http://+:8080
-      RabbitMq__Host: rabbitmq
-      RabbitMq__Username: guest
-      RabbitMq__Password: guest
-    ports:
-      - "5004:8080"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - fcg-net
-    restart: unless-stopped
+# A NotificationsAPI foi substituída pela função serverless fcg-notifications-fn,
+# que depende do KEDA para escalar a partir de zero e por isso só roda em
+# Kubernetes. Neste docker-compose, portanto, os eventos de notificação ficam
+# acumulados nas filas até que alguém os consuma — o que é esperado.
+# Para o ambiente completo da Fase 3 (gateway, observabilidade e serverless),
+# use o deploy em Kubernetes.
 
 volumes:
   postgres_data:
