@@ -80,24 +80,104 @@ docker build -t fcg-notifications-fn:latest  .\fcg-notifications-fn
 
 > **Atenção ao atualizar código.** Se `kubectl get nodes` mostrar um nó chamado `desktop-control-plane`, o cluster guarda as imagens em um armazenamento separado do Docker do host e mantém em cache a versão antiga da tag `latest`. Nesse caso, refazer o `docker build` não basta: é preciso remover a imagem antiga de dentro do cluster antes de recriar os pods. O sintoma é um serviço que sobe saudável executando código velho.
 
-## 2. Subir tudo
+## 2. Subir o ambiente
+
+A ordem das etapas importa, e o motivo está explicado em cada uma:
+
+| Etapa | O que sobe | Por que nesta posição |
+|---|---|---|
+| 0 | KEDA | É um operador de cluster, não parte da aplicação. Seus tipos precisam estar registrados antes da configuração de escala ser aplicada |
+| 1 | namespace `fcg` | Tudo da aplicação vive dentro dele |
+| 2 | PostgreSQL, RabbitMQ, MongoDB, Redis | As APIs não sobem sem eles — é preciso aguardar cada um ficar pronto |
+| 3 | Prometheus e Grafana | Sem espera: passam a coletar quando os serviços aparecerem |
+| 4 | Kong | Passa a ser a única porta de entrada |
+| 5 | UsersAPI, CatalogAPI, PaymentsAPI | Já encontram a infraestrutura no ar |
+| 6 | Função de notificações | Por último, e **sem espera** — não haver contêiner é o estado correto |
+
+### 2.1. Deploy automatizado (recomendado)
 
 ```powershell
 .\fcg-orchestration\k8s\apply-all.ps1     # Windows
 ./fcg-orchestration/k8s/apply-all.sh      # Linux/WSL
 ```
 
-O script executa, nesta ordem:
+O script executa exatamente as etapas da tabela acima, com as esperas corretas entre elas.
 
-| Etapa | O que sobe | Por que a ordem importa |
-|---|---|---|
-| 0 | KEDA | É um operador de cluster; seus tipos precisam estar registrados antes da configuração de escala ser aplicada |
-| 1 | namespace `fcg` | — |
-| 2 | PostgreSQL, RabbitMQ, MongoDB, Redis | As APIs não sobem sem eles; o script aguarda cada um ficar pronto |
-| 3 | Prometheus e Grafana | Sem espera: coletam quando os serviços aparecerem |
-| 4 | Kong | Passa a ser a única porta de entrada |
-| 5 | UsersAPI, CatalogAPI, PaymentsAPI | — |
-| 6 | Função de notificações | **Sem espera** — não haver contêiner é o estado correto |
+### 2.2. Deploy manual, passo a passo
+
+Se preferir entender cada etapa, ou precisar subir apenas parte do ambiente:
+
+```powershell
+# ── Etapa 0 ─ KEDA (uma única vez por cluster) ──────────────────────────────
+# Pule esta etapa se `kubectl get ns keda` já responder: o KEDA sobrevive à
+# exclusão do namespace da aplicação, então normalmente só é instalado uma vez.
+#
+# --server-side é necessário: os tipos do KEDA são grandes demais para o modo
+# padrão do kubectl. Ao reaplicar sobre uma instalação existente, o comando
+# imprime avisos de conflito de campo — são inofensivos.
+kubectl apply --server-side -f https://github.com/kedacore/keda/releases/download/v2.20.2/keda-2.20.2.yaml
+
+# Aguardar os tipos serem registrados. Sem isso, aplicar a configuração de escala
+# na etapa 7 falha com "no matches for kind ScaledObject".
+kubectl wait --for condition=established --timeout=90s crd/scaledobjects.keda.sh crd/triggerauthentications.keda.sh
+kubectl wait --for=condition=ready pod -l app=keda-operator -n keda --timeout=180s
+
+# Identificar o espaço como parte deste projeto (opcional, apenas organização)
+kubectl label namespace keda app.kubernetes.io/part-of=fcg --overwrite
+
+# ── Etapa 1 ─ Namespace da aplicação ────────────────────────────────────────
+kubectl apply -f .\fcg-orchestration\k8s\namespace.yaml
+
+# ── Etapa 2 ─ Bancos, cache e mensageria ────────────────────────────────────
+# Inclui a estrutura de filas do RabbitMQ, declarada como configuração para que
+# exista antes de qualquer serviço conectar.
+kubectl apply -f .\fcg-orchestration\k8s\infra\
+
+# ── Etapa 3 ─ Aguardar a infraestrutura ficar pronta ────────────────────────
+kubectl wait --for=condition=ready pod -l app=postgres -n fcg --timeout=180s
+kubectl wait --for=condition=ready pod -l app=rabbitmq -n fcg --timeout=180s
+kubectl wait --for=condition=ready pod -l app=mongodb  -n fcg --timeout=180s
+kubectl wait --for=condition=ready pod -l app=redis    -n fcg --timeout=120s
+
+# ── Etapa 4 ─ Observabilidade ───────────────────────────────────────────────
+kubectl apply -f .\fcg-orchestration\k8s\monitoring\
+
+# ── Etapa 5 ─ API Gateway ───────────────────────────────────────────────────
+kubectl apply -f .\fcg-orchestration\k8s\gateway\
+
+# ── Etapa 6 ─ Microsserviços ────────────────────────────────────────────────
+kubectl apply -f .\fcg-users-api\k8s\
+kubectl apply -f .\fcg-catalog-api\k8s\
+kubectl apply -f .\fcg-payments-api\k8s\
+
+kubectl rollout status deployment/users-api    -n fcg --timeout=300s
+kubectl rollout status deployment/catalog-api  -n fcg --timeout=300s
+kubectl rollout status deployment/payments-api -n fcg --timeout=300s
+
+# ── Etapa 7 ─ Função serverless de notificações ─────────────────────────────
+kubectl apply -f .\fcg-notifications-fn\k8s\
+
+# ── Conferência ─────────────────────────────────────────────────────────────
+kubectl get pods -n fcg
+kubectl get scaledobject -n fcg      # READY=True e ACTIVE=False
+```
+
+> **Não use `kubectl wait` na função de notificações.** Ela sobe com zero réplicas por design, então o comando ficaria travado até o tempo limite esperando um contêiner que não deve existir. A verificação correta é o `kubectl get scaledobject`.
+
+Em Linux ou WSL, troque as barras invertidas dos caminhos por barras normais (`./fcg-orchestration/k8s/infra/`).
+
+Do início ao fim, a sequência leva cerca de um minuto em um cluster local: a infraestrutura fica pronta em torno de 30 segundos e os serviços em mais 20.
+
+### 2.3. Subir apenas parte do ambiente
+
+As etapas são independentes depois que a infraestrutura está no ar. Por exemplo, para atualizar somente um serviço após alterar o código:
+
+```powershell
+docker build -t fcg-catalog-api:latest .\fcg-catalog-api
+# (se o cluster mantiver a imagem antiga em cache, ver a ressalva da etapa 1)
+kubectl rollout restart deployment/catalog-api -n fcg
+kubectl rollout status  deployment/catalog-api -n fcg
+```
 
 ## 3. Acessar
 
@@ -363,13 +443,44 @@ kubectl logs -n fcg -l app=users-api --tail=100 --follow
 kubectl exec -n fcg deploy/rabbitmq -- rabbitmqctl list_queues name messages consumers
 ```
 
-# Limpeza
+# Parar e limpar
+
+### Pausar sem perder nada
+
+Desliga os contêineres mantendo dados, configuração e o ambiente montado. Útil para liberar recursos da máquina entre sessões de trabalho:
 
 ```powershell
-kubectl delete namespace fcg      # remove a aplicação inteira, inclusive os dados
+kubectl scale deployment --all -n fcg --replicas=0
 ```
 
-O KEDA sobrevive a esse comando, intencionalmente: ele é do cluster, não da aplicação.
+Para religar, basta reaplicar os manifestos (etapas 4 a 7) ou rodar o `apply-all` novamente — as réplicas voltam aos valores dos manifestos.
+
+> A função de notificações já fica em zero por natureza; o KEDA continua cuidando dela.
+
+### Remover apenas os microsserviços
+
+Mantém bancos, mensageria e os dados:
+
+```powershell
+kubectl delete -f .\fcg-users-api\k8s\
+kubectl delete -f .\fcg-catalog-api\k8s\
+kubectl delete -f .\fcg-payments-api\k8s\
+kubectl delete -f .\fcg-notifications-fn\k8s\
+```
+
+### Remover tudo
+
+```powershell
+kubectl delete namespace fcg      # apaga a aplicação inteira, inclusive os dados
+```
+
+O KEDA **sobrevive** a esse comando, intencionalmente: ele é do cluster, não da aplicação. Na próxima subida, a etapa 0 pode ser pulada.
+
+Para remover também o KEDA, o que raramente é necessário:
+
+```powershell
+kubectl delete -f https://github.com/kedacore/keda/releases/download/v2.20.2/keda-2.20.2.yaml
+```
 
 ---
 
