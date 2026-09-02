@@ -31,6 +31,16 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/rabbitmq
+            # subPath em ambos: montar o diretório inteiro esconderia os demais
+            # arquivos de configuração da imagem.
+            - name: definitions
+              mountPath: /etc/rabbitmq/definitions.json
+              subPath: definitions.json
+              readOnly: true
+            - name: conf
+              mountPath: /etc/rabbitmq/conf.d/10-definitions.conf
+              subPath: 10-definitions.conf
+              readOnly: true
           readinessProbe:
             exec:
               command: ["rabbitmq-diagnostics", "ping"]
@@ -48,3 +58,9 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: rabbitmq-pvc
+        - name: definitions
+          configMap:
+            name: rabbitmq-definitions
+        - name: conf
+          configMap:
+            name: rabbitmq-conf

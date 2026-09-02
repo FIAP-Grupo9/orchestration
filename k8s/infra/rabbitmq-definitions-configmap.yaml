@@ -1,0 +1,226 @@
+# Topologia do RabbitMQ como configuracao versionada.
+#
+# Ate a Fase 2, filas, exchanges e bindings eram criados pelos servicos no
+# startup (o MassTransit os declara ao registrar um consumer). Na Fase 3 a
+# NotificationsAPI deixa de existir, e sem ela ninguem mais declararia as filas
+# que a funcao serverless consome. Isso causaria duas falhas silenciosas:
+#
+#   1. o KEDA consulta uma fila inexistente, nunca escala, e a funcao nunca sobe;
+#   2. o MassTransit publica em uma exchange fanout sem bindings, que descarta as
+#      mensagens sem erro algum.
+#
+# Declarando a topologia aqui, ela existe antes de qualquer servico subir e o
+# ambiente pode ser recriado do zero de forma previsivel.
+#
+# Origem: exportado do broker em funcionamento ao final da Fase 0, preservando
+# exatamente a topologia que o MassTransit cria (exchange do tipo da mensagem ->
+# exchange do endpoint -> fila).
+#
+# NOTA: a secao "users" traz o hash da senha do guest e precisa continuar
+# coerente com o rabbitmq-secret. Trocar a senha exige atualizar os dois lugares.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-definitions
+  namespace: fcg
+data:
+  definitions.json: |
+    {
+      "users": [
+        {
+          "name": "guest",
+          "password_hash": "Fa1GAyVF/qcfea+NjlCF5a7D+0VLz71EnjJLeiUm7UFvdK1R",
+          "hashing_algorithm": "rabbit_password_hashing_sha256",
+          "tags": [
+            "administrator"
+          ]
+        }
+      ],
+      "vhosts": [
+        {
+          "name": "/"
+        }
+      ],
+      "permissions": [
+        {
+          "user": "guest",
+          "vhost": "/",
+          "configure": ".*",
+          "write": ".*",
+          "read": ".*"
+        }
+      ],
+      "policies": [],
+      "parameters": [],
+      "queues": [
+        {
+          "name": "catalog-payment-processed",
+          "vhost": "/",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        },
+        {
+          "name": "notifications-payment-processed",
+          "vhost": "/",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        },
+        {
+          "name": "notifications-user-created",
+          "vhost": "/",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        },
+        {
+          "name": "payments-order-placed",
+          "vhost": "/",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        }
+      ],
+      "exchanges": [
+        {
+          "name": "catalog-payment-processed",
+          "vhost": "/",
+          "type": "fanout",
+          "durable": true,
+          "auto_delete": false,
+          "internal": false,
+          "arguments": {}
+        },
+        {
+          "name": "FCG.Contracts.Events:OrderPlacedEvent",
+          "vhost": "/",
+          "type": "fanout",
+          "durable": true,
+          "auto_delete": false,
+          "internal": false,
+          "arguments": {}
+        },
+        {
+          "name": "FCG.Contracts.Events:PaymentProcessedEvent",
+          "vhost": "/",
+          "type": "fanout",
+          "durable": true,
+          "auto_delete": false,
+          "internal": false,
+          "arguments": {}
+        },
+        {
+          "name": "FCG.Contracts.Events:UserCreatedEvent",
+          "vhost": "/",
+          "type": "fanout",
+          "durable": true,
+          "auto_delete": false,
+          "internal": false,
+          "arguments": {}
+        },
+        {
+          "name": "notifications-payment-processed",
+          "vhost": "/",
+          "type": "fanout",
+          "durable": true,
+          "auto_delete": false,
+          "internal": false,
+          "arguments": {}
+        },
+        {
+          "name": "notifications-user-created",
+          "vhost": "/",
+          "type": "fanout",
+          "durable": true,
+          "auto_delete": false,
+          "internal": false,
+          "arguments": {}
+        },
+        {
+          "name": "payments-order-placed",
+          "vhost": "/",
+          "type": "fanout",
+          "durable": true,
+          "auto_delete": false,
+          "internal": false,
+          "arguments": {}
+        }
+      ],
+      "bindings": [
+        {
+          "source": "FCG.Contracts.Events:OrderPlacedEvent",
+          "vhost": "/",
+          "destination": "payments-order-placed",
+          "destination_type": "exchange",
+          "routing_key": "",
+          "arguments": {}
+        },
+        {
+          "source": "FCG.Contracts.Events:PaymentProcessedEvent",
+          "vhost": "/",
+          "destination": "catalog-payment-processed",
+          "destination_type": "exchange",
+          "routing_key": "",
+          "arguments": {}
+        },
+        {
+          "source": "FCG.Contracts.Events:PaymentProcessedEvent",
+          "vhost": "/",
+          "destination": "notifications-payment-processed",
+          "destination_type": "exchange",
+          "routing_key": "",
+          "arguments": {}
+        },
+        {
+          "source": "FCG.Contracts.Events:UserCreatedEvent",
+          "vhost": "/",
+          "destination": "notifications-user-created",
+          "destination_type": "exchange",
+          "routing_key": "",
+          "arguments": {}
+        },
+        {
+          "source": "catalog-payment-processed",
+          "vhost": "/",
+          "destination": "catalog-payment-processed",
+          "destination_type": "queue",
+          "routing_key": "",
+          "arguments": {}
+        },
+        {
+          "source": "notifications-payment-processed",
+          "vhost": "/",
+          "destination": "notifications-payment-processed",
+          "destination_type": "queue",
+          "routing_key": "",
+          "arguments": {}
+        },
+        {
+          "source": "notifications-user-created",
+          "vhost": "/",
+          "destination": "notifications-user-created",
+          "destination_type": "queue",
+          "routing_key": "",
+          "arguments": {}
+        },
+        {
+          "source": "payments-order-placed",
+          "vhost": "/",
+          "destination": "payments-order-placed",
+          "destination_type": "queue",
+          "routing_key": "",
+          "arguments": {}
+        }
+      ]
+    }
+    
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-conf
+  namespace: fcg
+data:
+  10-definitions.conf: |
+    load_definitions = /etc/rabbitmq/definitions.json
