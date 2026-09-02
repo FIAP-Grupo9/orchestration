@@ -23,6 +23,9 @@ kubectl wait --for=condition=ready pod -l app=redis -n fcg --timeout=120s
 Write-Host "==> Stack de observabilidade (Prometheus + Grafana)" -ForegroundColor Cyan
 kubectl apply -f "$root/fcg-orchestration/k8s/monitoring/"
 
+Write-Host "==> API Gateway (Kong)" -ForegroundColor Cyan
+kubectl apply -f "$root/fcg-orchestration/k8s/gateway/"
+
 Write-Host "==> Microsservicos" -ForegroundColor Cyan
 kubectl apply -f "$root/fcg-users-api/k8s/"
 kubectl apply -f "$root/fcg-catalog-api/k8s/"
@@ -33,10 +36,12 @@ Write-Host "==> Status atual:" -ForegroundColor Cyan
 kubectl get pods,svc -n fcg
 
 Write-Host ""
-Write-Host "[OK] Deploy concluido. Use port-forward para acessar:" -ForegroundColor Green
-Write-Host "    kubectl port-forward svc/users-api    -n fcg 5001:8080"
-Write-Host "    kubectl port-forward svc/catalog-api  -n fcg 5002:8080"
-Write-Host "    kubectl port-forward svc/payments-api -n fcg 5003:8080"
+Write-Host "[OK] Deploy concluido." -ForegroundColor Green
+Write-Host ""
+Write-Host "  Porta de entrada unica do sistema (gateway):" -ForegroundColor Green
+Write-Host "    http://localhost:8000/users/...     e     http://localhost:8000/catalog/..."
+Write-Host ""
+Write-Host "  Ferramental interno (port-forward, um terminal por servico):"
 Write-Host "    kubectl port-forward svc/rabbitmq     -n fcg 15672:15672"
 Write-Host "    kubectl port-forward svc/grafana      -n fcg 3001:3000   # admin / fcg-grafana-admin"
 Write-Host "    kubectl port-forward svc/prometheus   -n fcg 9090:9090"

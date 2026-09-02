@@ -1,0 +1,17 @@
+# Único Service com exposição externa do sistema. Todos os demais permanecem
+# ClusterIP: o gateway é a porta de entrada única exigida pelo enunciado.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong-proxy
+  namespace: fcg
+  labels:
+    app: kong
+spec:
+  type: LoadBalancer
+  selector:
+    app: kong
+  ports:
+    - name: proxy
+      port: 8000
+      targetPort: 8000

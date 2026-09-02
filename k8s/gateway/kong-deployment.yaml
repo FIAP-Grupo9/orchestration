@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong
+  namespace: fcg
+  labels:
+    app: kong
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kong
+  template:
+    metadata:
+      labels:
+        app: kong
+    spec:
+      containers:
+        - name: kong
+          image: kong:3.9
+          env:
+            - { name: KONG_DATABASE,           value: "off" }
+            - { name: KONG_DECLARATIVE_CONFIG, value: "/kong/declarative/kong.yml" }
+            # Sem isto o Kong cria um worker por nucleo de CPU do host, cada um
+            # com sua propria VM Lua. Em uma maquina com muitos nucleos isso
+            # estoura o limite de memoria e o container e morto por OOM.
+            - { name: KONG_NGINX_WORKER_PROCESSES, value: "2" }
+            - { name: KONG_PROXY_ACCESS_LOG,   value: "/dev/stdout" }
+            - { name: KONG_PROXY_ERROR_LOG,    value: "/dev/stderr" }
+            - { name: KONG_PROXY_LISTEN,       value: "0.0.0.0:8000" }
+            # A API administrativa fica restrita ao loopback do container: não há
+            # motivo para expor administração do gateway ao cluster.
+            - { name: KONG_ADMIN_LISTEN,       value: "127.0.0.1:8001" }
+            - { name: KONG_STATUS_LISTEN,      value: "0.0.0.0:8100" }
+          ports:
+            - containerPort: 8000
+              name: proxy
+            - containerPort: 8100
+              name: status
+          volumeMounts:
+            - name: declarative
+              mountPath: /kong/declarative
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /status/ready, port: 8100 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /status, port: 8100 }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "1",    memory: "1Gi" }
+      volumes:
+        - name: declarative
+          configMap:
+            name: kong-declarative-config

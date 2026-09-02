@@ -1,0 +1,85 @@
+# Configuração declarativa do Kong (modo DB-less): rotas e políticas de segurança
+# ficam versionadas aqui, atendendo ao requisito do enunciado. Não existe estado
+# administrativo fora do Git.
+#
+# Como os caminhos são reescritos: cada serviço aponta para uma URL que já inclui
+# o prefixo do upstream, e a rota usa strip_path. O Kong remove o trecho que casou
+# e concatena o restante ao caminho do serviço. Exemplo:
+#   requisição /users/api/auth/login
+#   rota /users/api/auth (strip) -> resta "/login"
+#   serviço http://users-api:8080/api/auth -> upstream /api/auth/login
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-declarative-config
+  namespace: fcg
+data:
+  kong.yml: |
+    _format_version: "3.0"
+
+    # O plugin jwt identifica a credencial pelo claim "iss" do token. A UsersAPI
+    # já emite iss=FCG.UsersAPI (JwtSettings__Issuer), então nenhuma alteração foi
+    # necessária no serviço emissor.
+    consumers:
+      - username: fcg-usuarios
+        jwt_secrets:
+          - key: "FCG.UsersAPI"
+            algorithm: HS256
+            secret: "fcg-dev-secret-change-me-minimum-32-chars"
+
+    services:
+      # ---------------- UsersAPI ----------------
+      # Cadastro e login precisam ser públicos: é onde o token é obtido.
+      - name: users-auth-publico
+        url: http://users-api.fcg.svc.cluster.local:8080/api/auth
+        routes:
+          - name: users-auth
+            paths: ["/users/api/auth"]
+            strip_path: true
+
+      - name: users-health
+        url: http://users-api.fcg.svc.cluster.local:8080/health
+        routes:
+          - name: users-health
+            paths: ["/users/health"]
+            methods: ["GET"]
+            strip_path: true
+
+      # Demais rotas de usuários exigem token válido.
+      - name: users-protegido
+        url: http://users-api.fcg.svc.cluster.local:8080
+        routes:
+          - name: users
+            paths: ["/users"]
+            strip_path: true
+        plugins:
+          - name: jwt
+
+      # ---------------- CatalogAPI ----------------
+      # A vitrine (consulta de jogos e leitura de avaliações) é pública, como já
+      # era nos controllers. Apenas GET: escrever exige token e cai na rota protegida.
+      - name: catalog-jogos-publico
+        url: http://catalog-api.fcg.svc.cluster.local:8080/api/jogos
+        routes:
+          - name: catalog-jogos
+            paths: ["/catalog/api/jogos"]
+            methods: ["GET"]
+            strip_path: true
+
+      - name: catalog-health
+        url: http://catalog-api.fcg.svc.cluster.local:8080/health
+        routes:
+          - name: catalog-health
+            paths: ["/catalog/health"]
+            methods: ["GET"]
+            strip_path: true
+
+      # Biblioteca, compras, avaliações e administração exigem token válido.
+      - name: catalog-protegido
+        url: http://catalog-api.fcg.svc.cluster.local:8080
+        routes:
+          - name: catalog
+            paths: ["/catalog"]
+            strip_path: true
+        plugins:
+          - name: jwt
