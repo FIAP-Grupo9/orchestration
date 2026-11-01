@@ -36,6 +36,9 @@ kubectl wait --for=condition=ready pod -l app=mongodb -n fcg --timeout=180s
 Write-Host "==> Aguardando Redis ficar Ready..." -ForegroundColor Cyan
 kubectl wait --for=condition=ready pod -l app=redis -n fcg --timeout=120s
 
+Write-Host "==> Aguardando Elasticsearch ficar Ready..." -ForegroundColor Cyan
+kubectl wait --for=condition=ready pod -l app=elasticsearch -n fcg --timeout=180s
+
 Write-Host "==> Stack de observabilidade (Prometheus + Grafana)" -ForegroundColor Cyan
 kubectl apply -f "$root/fcg-orchestration/k8s/monitoring/"
 
