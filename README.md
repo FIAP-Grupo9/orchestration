@@ -278,6 +278,21 @@ kubectl logs -n fcg -l app=catalog-api --tail=20 | Select-String 'Cache'
 
 Editar um jogo descarta a cópia em cache, e a leitura seguinte já traz o dado novo.
 
+## Busca (Elasticsearch)
+
+Endpoint independente do Postgres, com fuzzy search (tolera erro de digitação) e resultados ordenados por relevância (`score`):
+
+```powershell
+# Pelo gateway (ambiente k8s completo)
+Invoke-RestMethod "$G/catalog/api/jogos/search?q=witcher"
+Invoke-RestMethod "$G/catalog/api/jogos/search?q=withcer"   # erro de digitação de propósito — ainda encontra
+
+# Direto na CatalogAPI, sem gateway (ex.: ambiente docker-compose, porta 5002)
+Invoke-RestMethod "http://localhost:5002/api/jogos/search?q=withcer"
+```
+
+Criar, editar ou excluir um jogo sincroniza o índice automaticamente (ver seção "Busca (Elasticsearch)" no README do CatalogAPI para o passo a passo completo de criar → buscar → editar → buscar → excluir → buscar). Se o Elasticsearch estiver fora do ar, o CRUD do catálogo continua funcionando — só a busca responde `503` até o índice voltar.
+
 ## Função serverless (o ciclo liga/desliga)
 
 ```powershell
