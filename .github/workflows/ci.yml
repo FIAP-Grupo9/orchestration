@@ -1,0 +1,32 @@
+name: CI
+
+# Este repositorio nao tem codigo de aplicacao — so docker-compose e manifestos
+# k8s. O "CI" aqui e validacao estrutural (sintaxe/schema), nao build/teste.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  validate-docker-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar docker-compose.yml
+        run: docker compose -f docker-compose.yml config -q
+
+  validate-k8s-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Validar manifestos (sintaxe/schema)
+        run: find k8s -name '*.yaml' -print0 | xargs -0 kubeconform -summary -ignore-missing-schemas

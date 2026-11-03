@@ -46,11 +46,11 @@ spec:
             - name: data
               mountPath: /usr/share/elasticsearch/data
           readinessProbe:
-            httpGet: { path: /_cluster/health?local=true, port: 9200 }
+            httpGet: { path: "/_cluster/health?local=true", port: 9200 }
             initialDelaySeconds: 20
             periodSeconds: 10
           livenessProbe:
-            httpGet: { path: /_cluster/health?local=true, port: 9200 }
+            httpGet: { path: "/_cluster/health?local=true", port: 9200 }
             initialDelaySeconds: 40
             periodSeconds: 20
           resources:
