@@ -314,6 +314,17 @@ Abra `http://localhost:3001` e o painel **FCG** já estará lá, sem nenhuma con
 
 ---
 
+## CI
+
+Este repositório não tem código de aplicação (só `docker-compose.yml` e manifestos k8s), então o GitHub Actions (`.github/workflows/ci.yml`) valida estrutura, não builda nada. A cada push ou pull request para `master`:
+
+- `docker compose config` valida o `docker-compose.yml`.
+- `kubeconform` valida todos os manifestos em `k8s/` (sintaxe e schema, sem precisar de um cluster real).
+
+Cada microsserviço (`catalog-api`, `users-api`, `payments-api`, `notifications-api`) tem seu próprio workflow de CI/CD (build, teste quando houver, e publicação da imagem no GHCR) — ver o README de cada um.
+
+---
+
 # Alternativa rápida — Docker Compose
 
 ```powershell
