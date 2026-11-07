@@ -46,11 +46,17 @@ spec:
               command: ["rabbitmq-diagnostics", "ping"]
             initialDelaySeconds: 20
             periodSeconds: 10
+            # Em VMs burstable (ex. Azure Standard_B2s), rabbitmq-diagnostics
+            # inicia sua própria VM Erlang a cada chamada e pode passar de 1s
+            # (default do K8s), derrubando o pod via falha de probe antes de
+            # ele terminar de subir.
+            timeoutSeconds: 5
           livenessProbe:
             exec:
               command: ["rabbitmq-diagnostics", "status"]
             initialDelaySeconds: 60
             periodSeconds: 30
+            timeoutSeconds: 5
           resources:
             requests: { cpu: "100m", memory: "256Mi" }
             limits:   { cpu: "1",    memory: "1Gi" }
