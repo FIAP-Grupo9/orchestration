@@ -1,0 +1,69 @@
+name: Deploy infra compartilhada (AKS)
+
+# A infra (Postgres, RabbitMQ, MongoDB, Redis, Elasticsearch, Kong) muda com
+# pouca frequencia, entao o deploy e manual em vez de automatico a cada push.
+# Os manifestos commitados em k8s/ nao tem nenhum valor de senha/segredo real
+# — so placeholders "${VAR}" — que esta pipeline substitui por envsubst a
+# partir de GitHub Secrets antes de aplicar no cluster.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login no Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Apontar kubectl para o AKS
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
+
+      - name: Namespace
+        run: kubectl apply -f k8s/namespace.yaml
+
+      - name: Infra (com segredos substituídos em memória, nunca escritos em disco)
+        env:
+          POSTGRES_ROOT_PASSWORD: ${{ secrets.POSTGRES_ROOT_PASSWORD }}
+          USERS_DB_PASSWORD: ${{ secrets.USERS_DB_PASSWORD }}
+          CATALOG_DB_PASSWORD: ${{ secrets.CATALOG_DB_PASSWORD }}
+          PAYMENTS_DB_PASSWORD: ${{ secrets.PAYMENTS_DB_PASSWORD }}
+          MONGODB_ROOT_PASSWORD: ${{ secrets.MONGODB_ROOT_PASSWORD }}
+        run: |
+          for f in k8s/infra/*.yaml; do
+            envsubst < "$f" | kubectl apply -f -
+          done
+
+      - name: Aguardar Postgres, RabbitMQ, MongoDB, Redis e Elasticsearch ficarem Ready
+        run: |
+          kubectl wait --for=condition=ready pod -l app=postgres -n fcg --timeout=180s
+          kubectl wait --for=condition=ready pod -l app=rabbitmq -n fcg --timeout=180s
+          kubectl wait --for=condition=ready pod -l app=mongodb -n fcg --timeout=180s
+          kubectl wait --for=condition=ready pod -l app=redis -n fcg --timeout=120s
+          kubectl wait --for=condition=ready pod -l app=elasticsearch -n fcg --timeout=180s
+
+      - name: Observabilidade (Prometheus + Grafana)
+        env:
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          for f in k8s/monitoring/*.yaml; do
+            envsubst < "$f" | kubectl apply -f -
+          done
+
+      - name: Gateway (Kong)
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          for f in k8s/gateway/*.yaml; do
+            envsubst < "$f" | kubectl apply -f -
+          done
+
+      - name: Status final
+        run: kubectl get pods,svc -n fcg
