@@ -321,7 +321,48 @@ Este repositório não tem código de aplicação (só `docker-compose.yml` e ma
 - `docker compose config` valida o `docker-compose.yml`.
 - `kubeconform` valida todos os manifestos em `k8s/` (sintaxe e schema, sem precisar de um cluster real).
 
-Cada microsserviço (`catalog-api`, `users-api`, `payments-api`, `notifications-api`) tem seu próprio workflow de CI/CD (build, teste quando houver, e publicação da imagem no GHCR) — ver o README de cada um.
+Cada microsserviço (`catalog-api`, `users-api`, `payments-api`, `notifications-api`) tem seu próprio workflow de CI/CD (build, teste quando houver, publicação da imagem no ACR e deploy no AKS) — ver o README de cada um.
+
+---
+
+## Segredos e deploy da infra no AKS (Fase 4)
+
+Nenhum `k8s/*.yaml` deste repositório contém senha, connection string ou segredo
+em texto puro. Todo arquivo que precisa de um valor sensível (`postgres-secret.yaml`,
+`postgres-init-secret.yaml`, `mongodb-secret.yaml`, `rabbitmq-secret.yaml`,
+`grafana-secret.yaml`, `gateway/kong-configmap.yaml`) traz apenas um placeholder
+`${NOME_DA_VARIAVEL}`. O workflow `.github/workflows/deploy-infra.yml`
+(`workflow_dispatch`, manual — essa infra muda com pouca frequência) substitui
+os placeholders via `envsubst`, a partir de GitHub Secrets, inteiramente em
+memória no runner, e só então aplica no cluster com `kubectl apply`. O valor
+real nunca é escrito em disco nem commitado.
+
+Secrets necessários no GitHub (nível de organização `FIAP-Grupo9`, para valer
+para todos os repositórios sem repetir):
+
+| Secret | Uso |
+|---|---|
+| `AZURE_CREDENTIALS` | JSON do Service Principal (`az ad sp create-for-rbac --sdk-auth`), escopado ao resource group do projeto |
+| `AKS_RESOURCE_GROUP` | Nome do resource group (ex. `rg-fcg-techchallenge`) |
+| `AKS_CLUSTER_NAME` | Nome do cluster AKS (ex. `aks-fcg-techchallenge`) |
+| `ACR_LOGIN_SERVER` | Login server do Azure Container Registry (ex. `fcgtechchallengeacr.azurecr.io`) |
+| `JWT_SECRET` | Segredo de assinatura JWT — precisa ser idêntico no Kong e em UsersAPI/CatalogAPI/PaymentsAPI |
+| `POSTGRES_ROOT_PASSWORD` | Senha do usuário `postgres` (root) |
+| `USERS_DB_PASSWORD` / `CATALOG_DB_PASSWORD` / `PAYMENTS_DB_PASSWORD` | Senha do usuário de banco de cada serviço |
+| `MONGODB_ROOT_PASSWORD` | Senha do usuário root do MongoDB |
+| `GRAFANA_ADMIN_PASSWORD` | Senha do usuário `admin` do Grafana |
+
+**Exceção documentada:** `k8s/infra/rabbitmq-secret.yaml` mantém `guest`/`guest`
+(o usuário padrão de desenvolvimento do próprio RabbitMQ) sem placeholder.
+`k8s/infra/rabbitmq-definitions-configmap.yaml` já guarda apenas o **hash**
+(SHA-256 salgado) dessa senha, nunca o valor em texto puro — trocar o valor
+exigiria regerar esse hash e arrisca quebrar a topologia de filas/exchanges na
+primeira inicialização. Como não é um valor em texto puro e é um default
+público e documentado do próprio RabbitMQ (não uma credencial de negócio como
+as de banco de dados ou o segredo JWT), foi deixado como está por ora.
+
+Para aplicar a infra compartilhada no AKS: GitHub → Actions → **Deploy infra
+compartilhada (AKS)** → Run workflow.
 
 ---
 

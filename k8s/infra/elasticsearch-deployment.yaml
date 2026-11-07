@@ -29,6 +29,11 @@ spec:
       labels:
         app: elasticsearch
     spec:
+      # Em discos de bloco de nuvem (Azure Disk, EBS) o ponto de montagem vem
+      # com dono root, mas o processo do Elasticsearch roda como uid 1000.
+      # fsGroup faz o kubelet ajustar o grupo do volume no attach.
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: elasticsearch
           image: docker.elastic.co/elasticsearch/elasticsearch:9.1.2

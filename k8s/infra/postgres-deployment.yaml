@@ -38,6 +38,12 @@ spec:
           envFrom:
             - secretRef:
                 name: postgres-secret
+          env:
+            # Em discos de bloco de nuvem (Azure Disk, EBS) o ponto de montagem já
+            # vem com um diretório "lost+found", e o initdb recusa inicializar em
+            # diretório não vazio. Uma subpasta evita o conflito.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
@@ -62,5 +68,5 @@ spec:
           persistentVolumeClaim:
             claimName: postgres-pvc
         - name: init
-          configMap:
-            name: postgres-init
+          secret:
+            secretName: postgres-init

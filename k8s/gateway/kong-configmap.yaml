@@ -25,7 +25,10 @@ data:
         jwt_secrets:
           - key: "FCG.UsersAPI"
             algorithm: HS256
-            secret: "fcg-dev-secret-change-me-minimum-32-chars"
+            # Placeholder substituído por envsubst a partir do GitHub Secret
+            # JWT_SECRET na pipeline de deploy — precisa ser idêntico ao
+            # JwtSettings__Secret usado por UsersAPI/CatalogAPI/PaymentsAPI.
+            secret: "${JWT_SECRET}"
 
     services:
       # ---------------- UsersAPI ----------------
