@@ -364,6 +364,31 @@ as de banco de dados ou o segredo JWT), foi deixado como está por ora.
 Para aplicar a infra compartilhada no AKS: GitHub → Actions → **Deploy infra
 compartilhada (AKS)** → Run workflow.
 
+### Controle de custo: parar/retomar o cluster entre sessões
+
+`az aks stop` para a cobrança dos nós (VMs), mas **não** para o Load Balancer
+nem o IP público do Kong — esses continuam sendo cobrados 24h mesmo com o
+cluster parado, porque são recursos de rede do Service do Kubernetes, não do
+node pool. Para evitar esse custo residual entre sessões de trabalho:
+
+```powershell
+# Ao terminar a sessão:
+kubectl delete svc kong-proxy -n fcg   # libera o IP público do Load Balancer
+az aks stop --resource-group rg-fcg-techchallenge --name aks-fcg-techchallenge
+
+# Ao retomar:
+az aks start --resource-group rg-fcg-techchallenge --name aks-fcg-techchallenge
+az aks get-credentials --resource-group rg-fcg-techchallenge --name aks-fcg-techchallenge --overwrite-existing
+kubectl apply -f k8s/gateway/   # recria o Service; o IP público muda a cada vez
+```
+
+O manifesto `k8s/gateway/kong-service.yaml` continua `type: LoadBalancer` —
+só a instância ativa no cluster é removida enquanto ocioso, não a definição
+versionada. O IP de saída do cluster (SNAT, usado pelos nós para acessar a
+internet) é um recurso diferente, gerenciado pelo próprio AKS, e não deve ser
+removido — tentar apagá-lo falha com `InvalidResourceReference` porque está
+em uso pela `aksOutboundRule`.
+
 ---
 
 # Alternativa rápida — Docker Compose
