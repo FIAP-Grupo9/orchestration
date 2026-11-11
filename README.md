@@ -327,6 +327,10 @@ Cada microsserviço (`catalog-api`, `users-api`, `payments-api`, `notifications-
 
 ## Segredos e deploy da infra no AKS (Fase 4)
 
+> Como o resource group, o ACR e o AKS em si foram provisionados (e como
+> recriar tudo do zero, ou apagar tudo para zerar o custo) está em
+> [`docs/azure-provisioning.md`](docs/azure-provisioning.md).
+
 Nenhum `k8s/*.yaml` deste repositório contém senha, connection string ou segredo
 em texto puro. Todo arquivo que precisa de um valor sensível (`postgres-secret.yaml`,
 `postgres-init-secret.yaml`, `mongodb-secret.yaml`, `rabbitmq-secret.yaml`,
